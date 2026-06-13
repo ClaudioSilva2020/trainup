@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#0B2545"/>
+
+  <!-- Barbell bar -->
+  <rect x="96" y="240" width="320" height="32" rx="16" fill="#1FD65F"/>
+
+  <!-- Outer plates -->
+  <rect x="64" y="160" width="56" height="192" rx="16" fill="#1FD65F"/>
+  <rect x="392" y="160" width="56" height="192" rx="16" fill="#1FD65F"/>
+
+  <!-- Inner plates -->
+  <rect x="128" y="192" width="40" height="128" rx="12" fill="#FFFFFF"/>
+  <rect x="344" y="192" width="40" height="128" rx="12" fill="#FFFFFF"/>
+
+  <!-- Upward progress chevron ("Up") -->
+  <path d="M196 232 L256 168 L316 232" stroke="#FFD60A" stroke-width="28"
+        stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
