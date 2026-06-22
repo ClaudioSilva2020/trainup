@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/trainup_logo.dart';
-import '../../home/presentation/home_screen.dart';
 
-/// Tela de boas-vindas — apresenta a marca e o propósito do app.
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
 
@@ -47,21 +46,13 @@ class SplashScreen extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    );
-                  },
+                  onPressed: () => context.go('/register'),
                   child: const Text('Começar'),
                 ),
               ),
               const SizedBox(height: 16),
               TextButton(
-                onPressed: () {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const HomeScreen()),
-                  );
-                },
+                onPressed: () => context.go('/login'),
                 style: TextButton.styleFrom(foregroundColor: Colors.white70),
                 child: const Text('Já tenho uma conta'),
               ),

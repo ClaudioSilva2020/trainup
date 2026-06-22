@@ -1,125 +1,138 @@
 import 'package:flutter/material.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/trainup_logo.dart';
+import '../../workout_engine/domain/workout_plan.dart';
+import '../../workout_engine/presentation/workout_engine_provider.dart';
 
-/// Mock da Home do aluno — "treino de hoje" gerado pelo motor de regras (RF-002).
-///
-/// Os dados abaixo são estáticos apenas para apresentação ao cliente.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  static const _exercises = [
-    _ExerciseItem(
-      name: 'Supino reto com halteres',
-      muscle: 'Peito',
-      sets: '4 séries x 8-12 reps',
-    ),
-    _ExerciseItem(
-      name: 'Desenvolvimento de ombro',
-      muscle: 'Ombro',
-      sets: '3 séries x 8-12 reps',
-    ),
-    _ExerciseItem(
-      name: 'Tríceps corda',
-      muscle: 'Tríceps',
-      sets: '3 séries x 10-12 reps',
-    ),
-    _ExerciseItem(
-      name: 'Flexão de braço',
-      muscle: 'Peito / Tríceps',
-      sets: '3 séries x até a falha',
-    ),
-  ];
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final planAsync = ref.watch(activePlanProvider);
+    final generateState = ref.watch(generatePlanProvider);
+    final user = Supabase.instance.client.auth.currentUser;
+    final firstName = (user?.userMetadata?['full_name'] as String?)
+            ?.split(' ')
+            .first ??
+        'Atleta';
+
+    ref.listen<GeneratePlanState>(generatePlanProvider, (_, next) {
+      if (next is GeneratePlanError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.message),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+        ref.read(generatePlanProvider.notifier).reset();
+      }
+    });
+
     return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.navy,
+        elevation: 0,
         title: const TrainUpLogo(
-          variant: TrainUpLogoVariant.icon,
-          height: 32,
-        ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 16),
-            child: CircleAvatar(
-              backgroundColor: AppColors.green,
-              child: Text('A', style: TextStyle(color: AppColors.navy)),
-            ),
+            variant: TrainUpLogoVariant.horizontal, height: 28),
+        centerTitle: false,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.white70),
+            tooltip: 'Sair',
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+            },
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          const Text(
-            'Olá, Ana 👋',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Semana 2 de 4 · Plano gerado automaticamente',
-            style: TextStyle(color: AppColors.grey),
-          ),
-          const SizedBox(height: 20),
-          _TodayWorkoutCard(exercises: _exercises),
-          const SizedBox(height: 20),
-          const _ProgressCard(),
-        ],
+      body: planAsync.when(
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppColors.green),
+        ),
+        error: (e, _) => _ErrorView(message: e.toString()),
+        data: (plan) {
+          if (plan == null) {
+            return _EmptyPlanView(
+              firstName: firstName,
+              isGenerating: generateState is GeneratePlanLoading,
+              onGenerate: () =>
+                  ref.read(generatePlanProvider.notifier).generate(),
+            );
+          }
+          return _PlanView(plan: plan, firstName: firstName);
+        },
       ),
     );
   }
 }
 
-class _TodayWorkoutCard extends StatelessWidget {
-  const _TodayWorkoutCard({required this.exercises});
+// ---------------------------------------------------------------------------
+// Sem plano gerado ainda
+// ---------------------------------------------------------------------------
+class _EmptyPlanView extends StatelessWidget {
+  const _EmptyPlanView({
+    required this.firstName,
+    required this.isGenerating,
+    required this.onGenerate,
+  });
 
-  final List<_ExerciseItem> exercises;
+  final String firstName;
+  final bool isGenerating;
+  final VoidCallback onGenerate;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    return Center(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
+            const Icon(Icons.fitness_center, size: 72, color: AppColors.green),
+            const SizedBox(height: 20),
+            Text(
+              'Olá, $firstName!',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: AppColors.navy,
+                    fontWeight: FontWeight.bold,
                   ),
-                  decoration: BoxDecoration(
-                    color: AppColors.green.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'TREINO DE HOJE',
-                    style: TextStyle(
-                      color: AppColors.navy,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              ],
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Push — Peito, Ombro e Tríceps',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              'Vamos gerar o seu plano de treino personalizado agora.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: AppColors.grey),
             ),
-            const SizedBox(height: 16),
-            for (final exercise in exercises) _ExerciseRow(exercise: exercise),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {},
-                child: const Text('Iniciar treino'),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: isGenerating ? null : onGenerate,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.green,
+                foregroundColor: Colors.white,
+                minimumSize: const Size(220, 52),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: isGenerating
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.auto_awesome),
+              label: Text(
+                isGenerating ? 'Gerando...' : 'Gerar meu treino',
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -129,48 +142,75 @@ class _TodayWorkoutCard extends StatelessWidget {
   }
 }
 
-class _ExerciseRow extends StatelessWidget {
-  const _ExerciseRow({required this.exercise});
+// ---------------------------------------------------------------------------
+// Plano gerado — exibe divisão de treino completa
+// ---------------------------------------------------------------------------
+class _PlanView extends StatelessWidget {
+  const _PlanView({required this.plan, required this.firstName});
 
-  final _ExerciseItem exercise;
+  final WorkoutPlan plan;
+  final String firstName;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+            child: _PlanHeader(plan: plan, firstName: firstName)),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          sliver: SliverList.separated(
+            itemCount: plan.days.length,
+            separatorBuilder: (ctx, i) => const SizedBox(height: 12),
+            itemBuilder: (_, i) =>
+                _DayCard(day: plan.days[i], planId: plan.id),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PlanHeader extends StatelessWidget {
+  const _PlanHeader({required this.plan, required this.firstName});
+
+  final WorkoutPlan plan;
+  final String firstName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.navy,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.fitness_center,
-              color: AppColors.navy,
-              size: 20,
+          Text(
+            'Olá, $firstName!',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  exercise.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  '${exercise.muscle} · ${exercise.sets}',
-                  style: const TextStyle(
-                    color: AppColors.grey,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
+          const SizedBox(height: 4),
+          Text(
+            plan.splitTemplateName,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _StatChip(
+                icon: Icons.calendar_today,
+                label: '${plan.days.length} dias/semana',
+              ),
+              const SizedBox(width: 10),
+              _StatChip(
+                icon: Icons.loop,
+                label: 'Semana ${plan.cycleWeek} de 4',
+              ),
+            ],
           ),
         ],
       ),
@@ -178,60 +218,173 @@ class _ExerciseRow extends StatelessWidget {
   }
 }
 
-class _ProgressCard extends StatelessWidget {
-  const _ProgressCard();
+class _StatChip extends StatelessWidget {
+  const _StatChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Sua evolução',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: const [
-                _ProgressStat(label: 'Treinos no mês', value: '6'),
-                _ProgressStat(label: 'Peso atual', value: '78,2 kg'),
-                _ProgressStat(label: 'Sequência', value: '3 dias'),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(20),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppColors.green, size: 14),
+          const SizedBox(width: 6),
+          Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        ],
+      ),
+    );
+  }
+}
+
+class _DayCard extends StatelessWidget {
+  const _DayCard({required this.day, required this.planId});
+
+  final WorkoutDay day;
+  final String planId;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () => context.push(
+        '/session',
+        extra: (day: day, planId: planId),
+      ),
+      child: Card(
+        elevation: 0,
+        color: Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: AppColors.navy,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${day.dayIndex + 1}',
+                        style: const TextStyle(
+                          color: AppColors.green,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    day.label,
+                    style: const TextStyle(
+                      color: AppColors.navy,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      Text(
+                        '${day.exercises.length} exercícios',
+                        style: const TextStyle(
+                            color: AppColors.grey, fontSize: 12),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.chevron_right,
+                          color: AppColors.grey, size: 18),
+                    ],
+                  ),
+                ],
+              ),
+              if (day.exercises.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+                ...day.exercises.map((e) => _ExerciseRow(exercise: e)),
               ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _ProgressStat extends StatelessWidget {
-  const _ProgressStat({required this.label, required this.value});
+class _ExerciseRow extends StatelessWidget {
+  const _ExerciseRow({required this.exercise});
 
-  final String label;
-  final String value;
+  final PlannedExercise exercise;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
         children: [
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.navy,
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.fitness_center,
+                color: AppColors.green, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  exercise.name,
+                  style: const TextStyle(
+                    color: AppColors.navy,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  exercise.primaryMuscle,
+                  style:
+                      const TextStyle(color: AppColors.grey, fontSize: 11),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.grey, fontSize: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${exercise.sets}×${exercise.repsMin}-${exercise.repsMax}',
+                style: const TextStyle(
+                  color: AppColors.navy,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+              Text(
+                'RIR ${exercise.rir} · ${exercise.restSeconds}s',
+                style:
+                    const TextStyle(color: AppColors.grey, fontSize: 11),
+              ),
+            ],
           ),
         ],
       ),
@@ -239,14 +392,27 @@ class _ProgressStat extends StatelessWidget {
   }
 }
 
-class _ExerciseItem {
-  const _ExerciseItem({
-    required this.name,
-    required this.muscle,
-    required this.sets,
-  });
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message});
 
-  final String name;
-  final String muscle;
-  final String sets;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 12),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.grey)),
+          ],
+        ),
+      ),
+    );
+  }
 }
