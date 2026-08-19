@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Necessária em release: os manifestos de debug/ e profile/ declaram INTERNET
+         apenas para as ferramentas do Flutter, e não são mesclados no build de release. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="trainup"
         android:name="${applicationName}"
